@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expt 2 · Data Dashboard Connector</title>
+<style>
+  :root{
+    --bg:#0a0e1a; --panel:#111827; --panel2:#0d1322; --line:#ffffff14;
+    --text:#e8ecf8; --dim:#8b93ab; --acc:#6ea8ff; --good:#3fda94;
+    --warn:#ffcc66; --bad:#ff8080; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; color:var(--text);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:
+      radial-gradient(1200px 500px at 85% -10%, #16233f66, transparent),
+      radial-gradient(900px 420px at -10% 110%, #10281f55, transparent),
+      var(--bg);
+  }
+  header{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:12px 18px; border-bottom:1px solid var(--line);
+    background:#0b101fcc; position:sticky; top:0; z-index:5; backdrop-filter:blur(6px);
+  }
+  .logo{font-size:22px}
+  h1{font-size:16px; margin:0; letter-spacing:.2px}
+  h1 small{display:block; font-weight:400; color:var(--dim); font-size:12px}
+  .chips{display:flex; gap:8px; margin-left:auto; flex-wrap:wrap}
+  .chip{
+    display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--dim);
+    border:1px solid var(--line); border-radius:999px; padding:4px 10px; background:var(--panel2);
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--warn); box-shadow:0 0 0 3px #ffcc6622}
+  .dot.on{background:var(--good); box-shadow:0 0 0 3px #3fda9422}
+  .chip b{color:var(--text); font-weight:600}
+  button.ghost{
+    border:1px solid var(--line); background:var(--panel2); color:var(--dim);
+    border-radius:999px; padding:4px 12px; font-size:11.5px; cursor:pointer;
+  }
+  button.ghost:hover{color:var(--text); border-color:#ffffff30}
+
+  main{
+    display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:14px;
+    padding:14px; max-width:1220px; margin:0 auto; height:calc(100vh - 61px);
+  }
+  @media (max-width:920px){
+    main{grid-template-columns:1fr; height:auto}
+    .side{order:2}
+    .chat{height:calc(100vh - 120px)}
+  }
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    overflow:hidden; display:flex; flex-direction:column; min-height:0;
+  }
+  .card h2{
+    margin:0; padding:10px 14px; font-size:11px; letter-spacing:1.2px;
+    text-transform:uppercase; color:var(--dim); border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:8px;
+  }
+
+  /* ---------- chat ---------- */
+  .chat{position:relative}
+  #messages{flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px}
+  .empty{
+    margin:auto; text-align:center; color:var(--dim); max-width:420px; padding:30px 10px;
+  }
+  .empty .big{font-size:38px}
+  .empty code{color:var(--acc)}
+  .flow{
+    margin-top:14px; font-family:var(--mono); font-size:11px; color:#aab3c7;
+    background:var(--panel2); border:1px dashed var(--line); border-radius:10px; padding:10px 12px;
+  }
+  .msg{display:flex; gap:10px; max-width:92%}
+  .msg.user{align-self:flex-end; flex-direction:row-reverse}
+  .avatar{
+    width:32px;height:32px;border-radius:10px;flex:0 0 32px;display:grid;place-items:center;
+    background:#182238; border:1px solid var(--line); font-size:16px;
+  }
+  .content{min-width:0; display:flex; flex-direction:column; gap:8px}
+  .msg.user .content{align-items:flex-end}
+  .bubble{
+    background:#182238; border:1px solid var(--line); border-radius:14px; padding:10px 14px;
+    white-space:pre-wrap; overflow-wrap:break-word;
+  }
+  .msg.user .bubble{background:#24406e; border-color:#3a5c96}
+  .bubble.err{border-color:#ff808055; background:#2a1620}
+  .bubble code{font-family:var(--mono); font-size:12.5px; background:#0a0f1d; padding:1px 5px; border-radius:5px}
+  .bubble ul{margin:6px 0 2px; padding-left:18px}
+  .bubble li{margin:2px 0}
+
+  /* ---------- reasoning trace ---------- */
+  .trace{border:1px dashed #ffffff22; background:var(--panel2); border-radius:12px; overflow:hidden}
+  .trace-head{
+    display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+    background:none; border:0; color:var(--dim); font-size:11.5px; padding:8px 12px; cursor:pointer;
+  }
+  .trace-head:hover{color:var(--text)}
+  .trace-head .chev{transition:transform .15s}
+  .trace.collapsed .chev{transform:rotate(-90deg)}
+  .trace.collapsed .trace-body{display:none}
+  .trace-body{padding:2px 12px 10px; display:flex; flex-direction:column; gap:8px}
+  .step{display:flex; gap:9px; font-size:13px}
+  .step .ic{flex:0 0 20px; text-align:center}
+  .step .lbl{font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--dim)}
+  .step .txt{color:#c9d2e6; white-space:pre-wrap}
+  .step.status .txt{color:var(--dim); font-style:italic}
+  pre.json{
+    margin:4px 0 0; font-family:var(--mono); font-size:11.3px; line-height:1.45;
+    background:#0a0f1d; border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; overflow:auto; max-height:190px; color:#b9d4ff;
+  }
+  pre.json.err{color:#ffb0b0; border-color:#ff808044}
+  .toolname{font-family:var(--mono); font-size:11.5px; color:#ffd08a; background:#2a2110;
+    border:1px solid #ffb86b33; padding:1px 7px; border-radius:6px}
+  .tag-ok{color:var(--good); font-size:11px}
+  .tag-bad{color:var(--bad); font-size:11px}
+
+  /* ---------- composer ---------- */
+  .composer{border-top:1px solid var(--line); padding:10px 12px; background:#0c1220}
+  .sugg{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:9px}
+  .sugg button{
+    font-size:11.5px; color:#aab3c7; background:var(--panel2); border:1px solid var(--line);
+    border-radius:999px; padding:4px 11px; cursor:pointer;
+  }
+  .sugg button:hover{color:var(--text); border-color:#ffffff30}
+  .inrow{display:flex; gap:8px}
+  #inp{
+    flex:1; background:var(--panel2); border:1px solid #ffffff22; color:var(--text);
+    border-radius:12px; padding:11px 14px; font-size:14.5px; outline:none;
+  }
+  #inp:focus{border-color:var(--acc)}
+  #send{
+    background:linear-gradient(135deg,#4f8cff,#7b5cff); color:#fff; border:0; border-radius:12px;
+    padding:0 20px; font-size:14.5px; font-weight:600; cursor:pointer;
+  }
+  #send:disabled{opacity:.45; cursor:default}
+
+  /* ---------- side panel ---------- */
+  .side{display:flex; flex-direction:column; gap:14px; min-height:0}
+  .kv{padding:10px 14px; display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:12.5px}
+  .kv .k{color:var(--dim)}
+  .kv .v{font-family:var(--mono); font-size:11.8px; overflow-wrap:anywhere}
+  .toolcard{margin:10px 14px 14px; border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--panel2)}
+  .toolcard .tn{font-family:var(--mono); font-size:12.5px; color:#ffd08a}
+  .toolcard .td{font-size:12px; color:var(--dim); margin:6px 0}
+  .argchips{display:flex; gap:5px; flex-wrap:wrap}
+  .argchips span{font-family:var(--mono); font-size:10.5px; color:#9fc1ff; border:1px solid #6ea8ff44; border-radius:6px; padding:1px 7px}
+  .wire{flex:1; min-height:120px; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:8px}
+  .frame{border:1px solid var(--line); border-radius:9px; overflow:hidden}
+  .frame .fh{
+    display:flex; gap:8px; align-items:center; font-size:10.5px; padding:4px 9px;
+    color:var(--dim); background:#0b101d; font-family:var(--mono);
+  }
+  .frame.out .fh .dir{color:#ffb86b}
+  .frame.in  .fh .dir{color:var(--good)}
+  .frame pre{margin:0; padding:7px 9px; font-family:var(--mono); font-size:10.8px; line-height:1.45;
+    color:#9fb4d8; max-height:130px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere}
+  .wire .none{color:var(--dim); font-size:12px; text-align:center; margin:14px 0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🛰️</div>
+  <h1>Data Dashboard Connector <small>Expt 2 · AI + tool server · context enhancement</small></h1>
+  <div class="chips">
+    <span class="chip"><span class="dot" id="conn-dot"></span>server <b id="conn-txt">connecting…</b></span>
+    <span class="chip"><span class="dot on"></span>brain <b id="llm-txt">…</b></span>
+    <span class="chip"><span class="dot on"></span>tools <b id="tools-txt">0</b></span>
+    <button class="ghost" id="clear" title="Clear the conversation">↺ reset</button>
+  </div>
+</header>
+
+<main>
+  <!-- ============================ CHAT ============================ -->
+  <section class="card chat">
+    <h2>💬 Chat — user ⇄ agent</h2>
+    <div id="messages">
+      <div class="empty" id="empty">
+        <div class="big">🌦️</div>
+        <p><b>Ask about the weather anywhere on Earth.</b><br>
+        The agent will show you its <i>entire thought process</i>: how it decides to call the
+        <code>get_current_weather</code> tool, the exact JSON it gets back, and how it turns that
+        into an answer.</p>
+        <div class="flow">you ⇄ agent (LLM) ⇄ JSON-RPC tool server ⇄ wttr.in / open-meteo</div>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="sugg">
+        <button>What's the weather in Tokyo?</button>
+        <button>Will it rain in Chennai today?</button>
+        <button>Compare London and New York</button>
+        <button>Tokyo vs Chennai in fahrenheit</button>
+        <button>What can you do?</button>
+      </div>
+      <div class="inrow">
+        <input id="inp" placeholder="e.g. What's the weather in Tokyo?" autocomplete="off">
+        <button id="send">Send</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SIDE ============================ -->
+  <aside class="side">
+    <div class="card">
+      <h2>🔌 Connection · MCP-style handshake</h2>
+      <div class="kv">
+        <span class="k">server</span>   <span class="v" id="kv-server">—</span>
+        <span class="k">version</span>  <span class="v" id="kv-version">—</span>
+        <span class="k">protocol</span> <span class="v" id="kv-proto">—</span>
+        <span class="k">transport</span><span class="v">JSON-RPC 2.0 over HTTP</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🧰 Tool catalog · from <span style="font-family:var(--mono)">tools/list</span></h2>
+      <div id="tools"><div class="kv"><span class="k">loading…</span></div></div>
+    </div>
+
+    <div class="card" style="flex:1">
+      <h2>📡 JSON-RPC wire log — client ⇄ server</h2>
+      <div class="wire" id="wire"><div class="none">the raw client-server messages will appear here</div></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const messages = $("#messages"), wire = $("#wire");
+let sessionId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()));
+let streaming = false, rpcId = 1;
+
+/* ---------------- tiny markdown renderer ---------------- */
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function md(text){
+  const lines = esc(text).split("\n");
+  let out = "", inList = false;
+  for (const ln of lines){
+    const li = ln.match(/^\s*[-•]\s+(.*)$/);
+    if (li){
+      if (!inList){ out += "<ul>"; inList = true; }
+      out += "<li>" + inline(li[1]) + "</li>";
+    } else {
+      if (inList){ out += "</ul>"; inList = false; }
+      out += ln === "" ? "" : inline(ln) + "<br>";
+    }
+  }
+  if (inList) out += "</ul>";
+  return out.replace(/(<br>)+$/,"");
+  function inline(s){
+    return s.replace(/`([^`]+)`/g,"<code>$1</code>")
+            .replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>")
+            .replace(/\*([^*\n]+)\*/g,"<em>$1</em>");
+  }
+}
+const pretty = o => JSON.stringify(o, null, 2);
+
+/* ---------------- assistant message scaffold ---------------- */
+function el(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+function scrollDown(){ messages.scrollTop = messages.scrollHeight; }
+
+function addUser(text){
+  $("#empty") && $("#empty").remove();
+  messages.appendChild(el(
+    `<div class="msg user"><div class="avatar">🧑</div><div class="content"><div class="bubble">${esc(text)}</div></div></div>`));
+  scrollDown();
+}
+
+function newAssistant(){
+  const node = el(
+    `<div class="msg assistant">
+       <div class="avatar">🛰️</div>
+       <div class="content">
+         <div class="trace">
+           <button class="trace-head"><span class="chev">▾</span><span>🧠 Reasoning trace</span><span class="meta"></span></button>
+           <div class="trace-body"></div>
+         </div>
+       </div>
+     </div>`);
+  const trace = node.querySelector(".trace");
+  trace.querySelector(".trace-head").addEventListener("click", () => trace.classList.toggle("collapsed"));
+  messages.appendChild(node); scrollDown();
+  const state = {node, body: trace.querySelector(".trace-body"),
+                 meta: trace.querySelector(".meta"), steps:0, calls:0,
+                 bubble:null, finish(){
+                   trace.classList.add("collapsed");
+                   trace.querySelector(".trace-head .chev").textContent="▸";
+                 }};
+  return state;
+}
+
+function addStep(a, kind, icon, label, innerHtml){
+  a.steps++;
+  const row = el(`<div class="step ${kind}"><div class="ic">${icon}</div><div><div class="lbl">${label}</div><div class="txt">${innerHtml}</div></div></div>`);
+  a.body.appendChild(row); updateMeta(a); scrollDown();
+  return row;
+}
+function addThought(a, text){ addStep(a,"thought","🧠","thinking", esc(text)); }
+function addStatus(a, text){ addStep(a,"status","⏳","status", esc(text)); }
+function addToolCall(a, ev){
+  a.calls++;
+  addStep(a,"call","🔧","tool call → server",
+    `<span class="toolname">${esc(ev.tool)}</span><pre class="json">${esc(pretty(ev.arguments))}</pre>`);
+}
+function addToolResult(a, ev){
+  const okTxt = ev.ok ? '<span class="tag-ok">✓ ok</span>' : '<span class="tag-bad">✗ error</span>';
+  const data = (typeof ev.data === "string") ? ev.data : pretty(ev.data);
+  addStep(a,"result","📄","tool result ← server",
+    `${okTxt} <pre class="json ${ev.ok?"":"err"}">${esc(data)}</pre>`);
+}
+function addAnswer(a, text){
+  const b = el(`<div class="bubble">${md(text)}</div>`);
+  a.node.querySelector(".content").appendChild(b); a.bubble=b; scrollDown();
+}
+function addError(a, text){
+  const b = el(`<div class="bubble err">${md(text)}</div>`);
+  a.node.querySelector(".content").appendChild(b); scrollDown();
+}
+function updateMeta(a){ a.meta.textContent = `· ${a.steps} step${a.steps===1?"":"s"} · ${a.calls} tool call${a.calls===1?"":"s"}`; }
+
+/* ---------------- wire log ---------------- */
+function addFrame(dir, payload){
+  const none = wire.querySelector(".none"); if (none) none.remove();
+  let txt = (typeof payload === "string") ? payload : pretty(payload);
+  if (txt.length > 1200) txt = txt.slice(0, 1200) + " …";
+  const method = payload && payload.method ? " · " + payload.method : "";
+  wire.appendChild(el(
+    `<div class="frame ${dir}">
+       <div class="fh"><span class="dir">${dir==="out" ? "→ client" : "← server"}</span><span>${method}</span></div>
+       <pre>${esc(txt)}</pre>
+     </div>`));
+  wire.scrollTop = wire.scrollHeight;
+}
+
+/* ---------------- JSON-RPC + handshake (visible on page load) ---------------- */
+async function rpc(method, params, notify){
+  const req = Object.assign({jsonrpc:"2.0", method}, notify ? {} : {id:rpcId++},
+                            params !== undefined ? {params} : {});
+  addFrame("out", req);
+  const res = await fetch("/rpc", {method:"POST",
+    headers:{"Content-Type":"application/json"}, body:JSON.stringify(req)});
+  if (notify){ addFrame("in", {note:"notification accepted — no response by design"}); return null; }
+  const body = await res.json();
+  addFrame("in", body);
+  if (body.error) throw new Error(body.error.message);
+  return body.result;
+}
+
+async function handshake(){
+  try{
+    const init = await rpc("initialize",
+      {protocolVersion:"2024-11-05", clientInfo:{name:"dashboard-web-client", version:"1.0.0"}});
+    await rpc("notifications/initialized", null, true);
+    const tl = await rpc("tools/list");
+    const si = (init.result && init.result.serverInfo) || {};
+    $("#kv-server").textContent = si.name || "—";
+    $("#kv-version").textContent = si.version || "—";
+    $("#kv-proto").textContent = (init.result && init.result.protocolVersion) || "—";
+    $("#conn-txt").textContent = "connected";
+    $("#conn-dot").classList.add("on");
+    renderTools((tl.result && tl.result.tools) || []);
+  }catch(e){
+    $("#conn-txt").textContent = "offline";
+  }
+}
+
+function renderTools(tools){
+  $("#tools-txt").textContent = tools.length;
+  const host = $("#tools"); host.innerHTML = "";
+  for (const t of tools){
+    const props = (t.inputSchema && t.inputSchema.properties) || {};
+    const req = (t.inputSchema && t.inputSchema.required) || [];
+    const chips = Object.keys(props).map(p =>
+      `<span>${esc(p)}${req.includes(p) ? "*" : ""}</span>`).join("");
+    host.appendChild(el(
+      `<div class="toolcard">
+         <div class="tn">${esc(t.name)}</div>
+         <div class="td">${esc(t.description)}</div>
+         <div class="argchips">${chips}</div>
+       </div>`));
+  }
+}
+
+fetch("/api/health").then(r=>r.json()).then(h=>{
+  $("#llm-txt").textContent = (h.llm||"").replace(/ \(.*\)/,"");
+}).catch(()=>{ $("#llm-txt").textContent="n/a"; });
+
+/* ---------------- chat streaming ---------------- */
+function handleEvent(ev, a){
+  switch(ev.type){
+    case "status":      addStatus(a, ev.text); break;
+    case "thought":     addThought(a, ev.text); break;
+    case "tool_call":   addToolCall(a, ev); break;
+    case "tool_result": addToolResult(a, ev); break;
+    case "rpc":         addFrame(ev.dir, ev.payload); break;
+    case "answer":      addAnswer(a, ev.text); break;
+    case "error":       addError(a, ev.text); break;
+  }
+}
+
+async function send(text){
+  if (streaming) return;
+  text = (text||"").trim(); if (!text) return;
+  addUser(text);
+  streaming = true; $("#send").disabled = true;
+  const a = newAssistant();
+  try{
+    const res = await fetch("/api/chat", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({message:text, session_id:sessionId})});
+    if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    while (true){
+      const {done, value} = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, {stream:true});
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0){
+        const chunk = buf.slice(0, i); buf = buf.slice(i+2);
+        for (const line of chunk.split("\n")){
+          if (!line.startsWith("data:")) continue;
+          try{ handleEvent(JSON.parse(line.slice(5).trim()), a); }catch(e){}
+        }
+      }
+    }
+  }catch(e){
+    addError(a, "⚠️ Could not reach the agent backend: " + e.message);
+  }
+  a.finish();
+  streaming = false; $("#send").disabled = false; $("#inp").focus();
+}
+
+$("#send").addEventListener("click", () => { const v=$("#inp").value; $("#inp").value=""; send(v); });
+$("#inp").addEventListener("keydown", e => { if (e.key==="Enter"){ const v=$("#inp").value; $("#inp").value=""; send(v);} });
+document.querySelectorAll(".sugg button").forEach(b =>
+  b.addEventListener("click", () => send(b.textContent)));
+$("#clear").addEventListener("click", () => {
+  messages.innerHTML = `<div class="empty" id="empty">
+    <div class="big">🌦️</div><p><b>Ask about the weather anywhere.</b><br>
+    Watch the agent think, call the tool, and answer.</p></div>`;
+  sessionId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()+Math.random()));
+});
+
+handshake();
+</script>
+</body>
+</html>
